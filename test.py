@@ -24,7 +24,7 @@ class BittorrentProtocol(DatagramProtocol):
             self.unvisitednodes.append((host, port))
         self.hashdb = HashDB()
         self.sshash = {}
-        self.unknownhashes = {}
+        self.hashnodes = []
 
     def startProtocol(self):
         # for host, port in self.bootnodes:
@@ -71,16 +71,12 @@ class BittorrentProtocol(DatagramProtocol):
                 self.rget_peers(tid, rmsg['a']['info_hash'], (host, port))
                 h = hexstr(rmsg['a']['info_hash'])
                 if self.hashdb.exist(h) == False:
-                    if (h in self.unknownhashes) == False:
-                        self.unknownhashes[h] = []
-                        self.unknownhashes[h].append((host, port))
+                    self.unknownhashes.append(rmsg['a']['info_hash'], host, port)
             elif rmsg['q'] == 'announce_peer':
                 self.rannounce_peer(tid, (host, port))
                 h = hexstr(rmsg['a']['info_hash'])
                 if self.hashdb.exist(h) == False:
-                    if (h in self.unknownhashes) == False:
-                        self.unknownhashes[h] = []
-                        self.unknownhashes[h].append((host, port))
+                    self.unknownhashes.append(rmsg['a']['info_hash'], host, port)
 
     def find_node(self, target, (host, port)):
         tid = gentid()
