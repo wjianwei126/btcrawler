@@ -56,9 +56,10 @@ class BittorrentProtocol(DatagramProtocol):
                 self.handle_rfindnode(rmsg)
                 # reactor.callLater(int(random.random()*10), self.handle_rfindnode, rmsg)
             elif mtype == 'get_peers':
-                if tid in self.sshash:
-                    self.handle_rgetpeers(self.sshash[tid], rmsg)
-                    del self.sshash[tid]
+                # if tid in self.sshash:
+                #     self.handle_rgetpeers(self.sshash[tid], rmsg)
+                #     del self.sshash[tid]
+                pass
             elif mtype == 'announce_peer':
                 pass
         elif rmsg['y'] == 'q':
@@ -70,13 +71,15 @@ class BittorrentProtocol(DatagramProtocol):
             elif rmsg['q'] == 'get_peers':
                 self.rget_peers(tid, rmsg['a']['info_hash'], (host, port))
                 h = hexstr(rmsg['a']['info_hash'])
-                if self.hashdb.exist(h) == False:
-                    self.unknownhashes.append(rmsg['a']['info_hash'], host, port)
+                self.hashdb.insert_hash(h)
+                # if self.hashdb.exist(h) == False:
+                #     self.unknownhashes.append(rmsg['a']['info_hash'], host, port)
             elif rmsg['q'] == 'announce_peer':
                 self.rannounce_peer(tid, (host, port))
                 h = hexstr(rmsg['a']['info_hash'])
-                if self.hashdb.exist(h) == False:
-                    self.unknownhashes.append(rmsg['a']['info_hash'], host, port)
+                self.hashdb.insert_hash(h)
+                # if self.hashdb.exist(h) == False:
+                #     self.unknownhashes.append(rmsg['a']['info_hash'], host, port)
 
     def find_node(self, target, (host, port)):
         tid = gentid()
@@ -228,23 +231,13 @@ class BittorrentProtocol(DatagramProtocol):
             self.nodes[nid] = (ip, port)
 
     def loop(self):
-        t = 8
+        t = 16
         while t > 0:
             t -= 1
             if len(self.unvisitednodes) == 0:
                 break
             host, port = self.unvisitednodes.pop()
             self.find_node(gen_id(), (host, port))
-
-        t = 8
-        while t > 0:
-            t -= 1
-            if len(self.hashnodes) == 0:
-                break
-            h, host, port = self.hashnodes.pop()
-            self.get_peers(h, (host, port))
-
-        # self.taskmgr.loop()
 
 def monitor(p):
     print "[%s] got %d nodes" % (datetime.now(), len(p.nodes))
@@ -260,5 +253,4 @@ def main():
     reactor.run()
 
 if __name__ == '__main__':
-    # main()
-    pass
+    main()
