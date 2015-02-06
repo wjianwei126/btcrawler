@@ -245,10 +245,10 @@ def monitor(p):
 def main():
     boots = (('router.bittorrent.com', 6881),)
     p = BittorrentProtocol(boots)
-    lc = LoopingCall(monitor, p)
-    lc.start(5)
+    # lc = LoopingCall(monitor, p)
+    # lc.start(5)
     lf = LoopingCall(p.loop)
-    lf.start(5)
+    lf.start(3)
     reactor.listenUDP(6881, p)
     reactor.run()
 
