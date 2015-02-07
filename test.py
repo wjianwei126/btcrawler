@@ -230,7 +230,7 @@ class BittorrentProtocol(DatagramProtocol):
             self.nodes[nid] = (ip, port)
 
     def found_hash(self, info_hash):
-        if self.hashdb.exist():
+        if self.hashdb.exist(info_hash):
             return
         self.hashq.put(info_hash)
 
