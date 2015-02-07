@@ -1,6 +1,7 @@
 
 import sqlite3
 import threading
+import os
 
 mutex = threading.Lock()
 
@@ -13,9 +14,14 @@ class HashDB:
         except sqlite3.OperationalError, e:
             if str(e) != 'table hashes already exists':
                 raise e
+        if not os.path.exists('data'):
+            os.makedirs('data')
 
     def release(self):
         self.conn.close()
+
+    def __make_path(self, h):
+        return 'data/%s.info' % (h,)
 
     def insert_hash(self, h, info):
         if len(h) != 40:
@@ -24,7 +30,7 @@ class HashDB:
         try:
             self.cursor.execute('''INSERT INTO hashes VALUES ('%s')''' % (h))
             self.conn.commit()
-            f = open(h, 'wb')
+            f = open(self.__make_path(h), 'wb')
             f.write(info)
             f.close()
         except sqlite3.IntegrityError, e:
