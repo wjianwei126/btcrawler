@@ -71,6 +71,7 @@ def bdecode(s):
         else:
             return None
     except Exception, e:
+        # raise e
         return None
 
 def gentid():

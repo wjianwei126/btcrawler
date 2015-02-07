@@ -14,10 +14,13 @@ class HashDB:
     def release(self):
         self.conn.close()
 
-    def insert_hash(self, h):
+    def insert_hash(self, h, info):
         try:
             self.cursor.execute('''INSERT INTO hashes VALUES ('%s')''' % (h))
             self.conn.commit()
+            f = open(h, 'wb')
+            f.write(info)
+            f.close()
         except sqlite3.IntegrityError, e:
             pass
 

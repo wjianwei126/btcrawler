@@ -12,26 +12,36 @@ import random
 from datetime import datetime
 from util import *
 from hashdb import *
+from getinfo import *
+import Queue
 
 class BittorrentProtocol(DatagramProtocol):
+
+    max_tasks = 10
+    min_port = 6882
+    max_port = 6891
 
     def __init__(self, bootnodes=()):
         self.id = gen_id()
         self.sessions = {}
         self.nodes = {}
+        self.bootnodes = bootnodes
         self.unvisitednodes = []
         for host, port in bootnodes:
             self.unvisitednodes.append((host, port))
         self.hashdb = HashDB()
-        self.sshash = {}
-        self.hashnodes = []
+        self.hashq = Queue.Queue()
+        self.tasks = {}
+        self.portmap = {}
+        for i in xrange(BittorrentProtocol.min_port, BittorrentProtocol.max_port+1):
+            self.portmap[i] = None
 
     def startProtocol(self):
-        # for host, port in self.bootnodes:
-            # self.find_node(self.id, (host, port))
-        pass
+        self.lc = LoopingCall(self.loop)
+        self.lc.start(3)
 
     def stopProtocol(self):
+        self.lc.stop()
         self.hashdb.release()
 
     def write(self, ip, port, data):
@@ -56,9 +66,6 @@ class BittorrentProtocol(DatagramProtocol):
                 self.handle_rfindnode(rmsg)
                 # reactor.callLater(int(random.random()*10), self.handle_rfindnode, rmsg)
             elif mtype == 'get_peers':
-                # if tid in self.sshash:
-                #     self.handle_rgetpeers(self.sshash[tid], rmsg)
-                #     del self.sshash[tid]
                 pass
             elif mtype == 'announce_peer':
                 pass
@@ -70,16 +77,10 @@ class BittorrentProtocol(DatagramProtocol):
                 self.rfind_node(tid, rmsg['a']['target'], (host, port))
             elif rmsg['q'] == 'get_peers':
                 self.rget_peers(tid, rmsg['a']['info_hash'], (host, port))
-                h = hexstr(rmsg['a']['info_hash'])
-                self.hashdb.insert_hash(h)
-                # if self.hashdb.exist(h) == False:
-                #     self.unknownhashes.append(rmsg['a']['info_hash'], host, port)
+                self.found_hash(rmsg['a']['info_hash'])
             elif rmsg['q'] == 'announce_peer':
                 self.rannounce_peer(tid, (host, port))
-                h = hexstr(rmsg['a']['info_hash'])
-                self.hashdb.insert_hash(h)
-                # if self.hashdb.exist(h) == False:
-                #     self.unknownhashes.append(rmsg['a']['info_hash'], host, port)
+                self.found_hash(rmsg['a']['info_hash'])
 
     def find_node(self, target, (host, port)):
         tid = gentid()
@@ -148,7 +149,6 @@ class BittorrentProtocol(DatagramProtocol):
     def get_peers(self, info_hash, (host, port)):
         tid = gentid()
         self.sessions[tid] = 'get_peers'
-        self.sshash[tid] = info_hash
         msg = {
             "t": tid,
             "y": "q",
@@ -191,7 +191,6 @@ class BittorrentProtocol(DatagramProtocol):
             for i in xrange(0, len(rmsg['r']['nodes']), 26):
                 nid, compact = unpack('>20s6s', rmsg['r']['nodes'][i:i+26])
                 ip, port = decompact(compact)
-                self.hashnodes.append((info_hash, ip, port))
         if 'values' in rmsg['r']:
             for compact in rmsg['r']['values']:
                 if len(compact) != 6:
@@ -230,6 +229,11 @@ class BittorrentProtocol(DatagramProtocol):
                 self.unvisitednodes.append((ip, port))
             self.nodes[nid] = (ip, port)
 
+    def found_hash(self, info_hash):
+        if self.hashdb.exist():
+            return
+        self.hashq.put(info_hash)
+
     def loop(self):
         t = 16
         while t > 0:
@@ -238,6 +242,24 @@ class BittorrentProtocol(DatagramProtocol):
                 break
             host, port = self.unvisitednodes.pop()
             self.find_node(gen_id(), (host, port))
+        for info_hash in self.tasks.keys():
+            port, task = self.tasks[info_hash]
+            if task.finish():
+                self.hashdb.insert_hash(hexstr(info_hash), task.get_result())
+            if task.timeout() or task.finish():
+                self.portmap[port].stopListening()
+                self.portmap[port] = None
+                del self.tasks[info_hash]
+        while len(self.tasks) < BittorrentProtocol.max_tasks and not self.hashq.empty():
+            info_hash = self.hashq.get()
+            if info_hash in self.tasks:
+                continue
+            task = GetinfoProtocol(info_hash, self.bootnodes)
+            for p in self.portmap.keys():
+                if self.portmap[p] == None:
+                    self.portmap[p] = reactor.listenUDP(p, task)
+                    self.tasks[info_hash] = (p, task)
+                    break
 
 def monitor(p):
     print "[%s] got %d nodes" % (datetime.now(), len(p.nodes))
@@ -247,8 +269,6 @@ def main():
     p = BittorrentProtocol(boots)
     # lc = LoopingCall(monitor, p)
     # lc.start(5)
-    lf = LoopingCall(p.loop)
-    lf.start(3)
     reactor.listenUDP(6881, p)
     reactor.run()
 
