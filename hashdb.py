@@ -1,5 +1,8 @@
 
 import sqlite3
+import threading
+
+mutex = threading.Lock()
 
 class HashDB:
     def __init__(self, filename='hash.db'):
@@ -15,6 +18,9 @@ class HashDB:
         self.conn.close()
 
     def insert_hash(self, h, info):
+        if len(h) != 40:
+            return
+        mutex.acquire()
         try:
             self.cursor.execute('''INSERT INTO hashes VALUES ('%s')''' % (h))
             self.conn.commit()
@@ -23,8 +29,11 @@ class HashDB:
             f.close()
         except sqlite3.IntegrityError, e:
             pass
+        finally:
+            mutex.release()
 
     def fetch_all_hashes(self):
+        mutex.acquire()
         try:
             result = self.cursor.execute('''SELECT * FROM hashes''')
             hashlist = []
@@ -32,14 +41,21 @@ class HashDB:
                 hashlist.append(str(row[0]))
             return hashlist
         except Exception, e:
-            return None
+            pass
+        finally:
+            mutex.release()
 
     def exist(self, h):
+        if len(h) != 40:
+            return False
+        mutex.acquire()
         try:
             result = self.cursor.execute('''SELECT * FROM hashes WHERE hash='%s' ''' % (h))
             return (len(result.fetchall()) > 0)
         except Exception, e:
             raise e
+        finally:
+            mutex.release()
 
 def main():
     db = HashDB()
